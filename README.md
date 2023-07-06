@@ -1,7 +1,7 @@
 # RFN (Recurrent Flow Networks)
 Probabilistic Learning of Multivariate Time Series with Temporal Irregularity
 
-![Image text](https://raw.github.com/lyjsilence/repositpry/main/RFN/img/TCH_pred.pdf)
+![Image text](https://github.com/lyjsilence/RFN/tree/main/img/TCH_pred.pdf)
 
 ### Requirements
 Python == 3.8.   
