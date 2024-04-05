@@ -49,7 +49,7 @@ python3 Climate.py -model_name RFN --marginal GRUODE --num_exp 5
 
 ### Financial Transactions (NASDAQ 100) Experiments
 NASDAQ 100 dataset can be downloaded from 
-http://cseweb.ucsd.edu/∼yaq007/NASDAQ100 stock data.html, or the data can be found in data/NASDAQ folder.
+https://cseweb.ucsd.edu/~yaq007/NASDAQ100_stock_data.html, or the data can be found in data/NASDAQ folder.
 
 Train the NASDAQ experiment
 ```
