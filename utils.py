@@ -12,6 +12,117 @@ import copy
 import properscoring as ps
 import six
 
+'''
+class DataGenertor:
+    def __init__(self, args, N):
+        self.args = args
+        self.N = N  # number of samples
+        self.num_series = args.input_dim
+        self.S0 = np.random.uniform(low=8, high=10, size=[self.N, 5])
+        rho = 0.9
+        self.corr = [[1,     rho,   0,     0,     0  ],
+                     [rho,   1,     0,     0,     0  ],
+                     [0,     0,     1,     rho,   rho],
+                     [0,     0,     rho,   1,     rho],
+                     [0,     0,     rho,   rho,   1  ]]
+        mu_down = np.random.uniform(low=-0.2, high=-0.05, size=[self.N, 2])
+        mu_up = np.random.uniform(low=0.05, high=0.2, size=[self.N, 3])
+        self.mu = np.concatenate([mu_down, mu_up], axis=1)
+        self.sigma = np.random.uniform(low=0.1, high=0.3, size=[self.N, 5])
+        self.rho = np.linalg.cholesky(self.corr)
+
+    def generate(self, n, T, dt):
+        self.t = round(T / dt)
+
+        mu, sigma, S0 \
+            = np.expand_dims(self.mu[n, :], axis=0), np.expand_dims(self.sigma[n, :], axis=0), np.expand_dims(self.S0[n, :], axis=0)
+
+        eps = np.random.normal(size=[self.t, self.num_series])
+
+        # eps = np.concatenate([np.zeros([1, self.num_series]), eps], axis=0)
+        eps = np.transpose(np.dot(self.rho, np.transpose(eps)))
+
+        p = np.zeros([self.t, self.num_series])
+        
+        p[0, :] = S0
+
+        for t in range(self.t - 1):
+            p[t + 1] = p[t] + p[t] * mu * dt + sigma * p[t] * eps[t] * dt ** 0.5
+        return p
+
+    def simulate(self, T=1, dt=0.01):
+        self.t = round(T / dt)  # number of observation periods
+        self.T = T
+        self.full = pd.DataFrame()
+        self.sample = pd.DataFrame()
+
+        for n in range(self.N):
+            idx = np.array([n] * self.t)
+            time = np.arange(0, T, dt)
+            p = self.generate(n, T, dt)
+
+            if self.args.type == 'async':
+                p_sample = self.sampling_async(p)
+            else:
+                p_sample = self.sampling_sync(p)
+
+            if len(idx.shape) == 1:
+                idx = np.expand_dims(idx, axis=1)
+            if len(time.shape) == 1:
+                time = np.expand_dims(time, axis=1)
+            if len(p.shape) == 1:
+                p = np.expand_dims(p, axis=1)
+            p = np.concatenate([idx, time, p], axis=1)
+            p_sample = np.concatenate([idx, time, p_sample], axis=1)
+
+            # delete time point when there is no observations
+            delete_idx = np.where(np.sum(p_sample[:, 7: 12], axis=1) == 0)
+            p_sample = np.delete(p_sample, delete_idx, axis=0)
+            self.full = pd.concat([self.full, pd.DataFrame(p)], axis=0)
+            self.sample = pd.concat([self.sample, pd.DataFrame(p_sample)], axis=0)
+        self.full.columns = ['idx', 'time'] + ['ts_'+str(i) for i in range(self.num_series)]
+        self.sample.columns = ['idx', 'time'] + ['ts_'+str(i) for i in range(self.num_series)] + \
+                              ['mask_'+str(i) for i in range(self.num_series)]
+
+    def sampling_async(self, p):
+        p_sample = copy.deepcopy(p)
+        if len(p_sample.shape) == 1:
+            p_sample = np.expand_dims(p_sample, axis=1)
+
+        mask = np.ones_like(p_sample)
+        for c in range(p_sample.shape[1]):
+            missing_idx = np.random.choice(self.t, int(self.t * self.args.missing_rate), replace=False)
+            p_sample[missing_idx, c] = 0
+            mask[missing_idx, c] = 0
+        return np.concatenate([p_sample, mask], axis=1)
+
+    def sampling_sync(self, p):
+        p_sample = copy.deepcopy(p)
+        if len(p_sample.shape) == 1:
+            p_sample = np.expand_dims(p_sample, axis=1)
+
+        mask = np.ones_like(p_sample)
+        missing_idx = np.random.choice(self.t, int(self.t * self.args.missing_rate), replace=False)
+        p_sample[missing_idx, :] = 0
+        mask[missing_idx, :] = 0
+        return np.concatenate([p_sample, mask], axis=1)
+
+    def plot(self, num_samples):
+        plot_idx = np.random.choice(self.N, num_samples)
+        plt.figure(figsize=(5 * num_samples, 5), dpi=80)
+        for c in range(len(plot_idx)):
+            plt.subplot(1, num_samples, c+1)
+            for i in range(self.num_series):
+                plt.plot(np.linspace(0, self.T, self.t), self.full[self.full['idx'] == plot_idx[c]]['ts_'+str(i)], label='Series'+str(i))
+            plt.legend()
+        plt.show()
+
+    def save(self, data_dirs):
+        self.full.to_csv(os.path.join(data_dirs, self.args.type+'_full_data.csv'), index=False)
+        self.sample.to_csv(os.path.join(data_dirs, self.args.type+'_sample_data.csv'), index=False)
+'''
+
+
 class DataGenertor:
     def __init__(self, args, N):
         self.args = args
@@ -351,3 +462,18 @@ def compute_ND(x, X_obs, M_obs):
                 ND_all.append(np.abs(X_obs[i, d]))
     return np.sum(ND_err), np.sum(ND_all)
 
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+
+    num_sampling_samples = 100000
+    t = 0.01
+    S0 = 8
+    mu = 0.01
+    sigma = 0.5
+    T = [0.1]
+    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+    plot_idx = 0
+
+    viz_MCMC(num_sampling_samples, t, S0, T, ax, plot_idx)
+    plt.show()

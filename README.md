@@ -1,8 +1,6 @@
 # RFN (Recurrent Flow Networks)
 Probabilistic Learning of Multivariate Time Series with Temporal Irregularity
 
-![Image text](https://github.com/lyjsilence/RFN/blob/main/img/TCH_pred.png)
-
 ### Requirements
 Python == 3.8.   
 Pytorch: 1.8.1+cu102, torchdiffeq: 0.2.2, Sklearn:0.23.2, Numpy: 1.19.2, Pandas: 1.1.3, Matplotlib: 3.3.2   
@@ -49,11 +47,12 @@ Train the USHCN experiment
 python3 Climate.py -model_name RFN --marginal GRUODE --num_exp 5 
 ```
 
-### Financial Transactions (Stock Options) Experiments
-The 3-min transaction data of Tencent stock and options can be found in data/TCH folder.
+### Financial Transactions (NASDAQ 100) Experiments
+NASDAQ 100 dataset can be downloaded from 
+http://cseweb.ucsd.edu/∼yaq007/NASDAQ100 stock data.html, or the data can be found in data/NASDAQ folder.
 
-Train the Physionet experiment
+Train the NASDAQ experiment
 ```
-python3 TCH.py -model_name RFN --marginal GRUODE --num_exp 5 
+python3 NASDAQ.py -model_name RFN --marginal GRUODE --num_exp 5 
 ```
 

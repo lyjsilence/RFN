@@ -1,18 +1,21 @@
 import os
 import numpy as np
 import torch
+import utils
+import copy
 import pandas as pd
 import argparse
 import random
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from models import RFN_sync, RFN_async
+from models import RFN
 from Baselines import GRU_ODE, ODELSTM, ODERNN, GRU_D
 from models_training import Trainer
 import utils
 import warnings
 
-
+import seaborn as sns
+import matplotlib.pyplot as plt
 warnings.filterwarnings('ignore')
 
 def set_seed(seed):
@@ -29,7 +32,7 @@ def set_seed(seed):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-parser = argparse.ArgumentParser(description="FLOW_GRUODE for USHCN datasets")
+parser = argparse.ArgumentParser(description="RFN for USHCN datasets")
 parser.add_argument('--seed', type=int, default=0, help='The random seed')
 parser.add_argument('--save_dirs', type=str, default='results/USHCN', help='The dirs for saving results')
 parser.add_argument('--log', type=bool, default=True, help='log the training process')
@@ -38,12 +41,11 @@ parser.add_argument('--cuda', type=int, default=0)
 # settings for experiments
 parser.add_argument('--type', type=str, default='async', choices=['sync', 'async'])
 parser.add_argument('--model_name', type=str, default='RFN', help='The model want to implement',
-                    choices=['GRU-delta-t', 'GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D', 'RFN'])
+                    choices=['GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D', 'RFN'])
 parser.add_argument('--start_exp', type=int, default=0, help='The number of experiment')
 parser.add_argument('--num_exp', type=int, default=5, help='The number of experiment')
 parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
-parser.add_argument('--min_lr', type=float, default=0.005, help='minimum learning rate')
-parser.add_argument('--adaptive_lr', type=str, default='cosine')
+parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--dt', type=float, default=0.1)
 parser.add_argument('--val_start', type=int, default=150)
@@ -53,10 +55,10 @@ parser.add_argument('--val_freq', type=int, default=5)
 # settings for sequential model
 parser.add_argument('--input_dim', type=int, default=5, help='The input dimension of time series')
 parser.add_argument('--memory_dim', type=int, default=10, help='The memory dimensions for one variable in marginal block')
-parser.add_argument('--marginal', type=str, default='GRUODE', help='The models for the marginal block',
-                    choices=['GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D'])
-parser.add_argument('--train_indep', type=bool, default=True, help='The models for the marginal block')
-parser.add_argument('--tol', type=float, default=1e-2)
+parser.add_argument('--marginal', type=str, default='GRUODE', help='The models for the marginal block')
+parser.add_argument('--atol', type=float, default=1e-2)
+parser.add_argument('--rtol', type=float, default=1e-2)
+
 
 # settings for flow model
 parser.add_argument('--solver', type=str, default='dopri5')
@@ -66,7 +68,6 @@ parser.add_argument('--act_fn', type=str, default='softplus', choices=['tanh', '
 parser.add_argument('--rademacher', type=bool, default=False)
 parser.add_argument('--flow_time', type=float, default=1)
 parser.add_argument('--train_T', type=bool, default=True)
-parser.add_argument('--batch_norm', type=bool, default=True)
 parser.add_argument('--viz', type=bool, default=False)
 parser.add_argument('--dropout', type=float, default=0)
 
@@ -112,10 +113,7 @@ if __name__ == '__main__':
               f'num_CNF={args.num_blocks}, dropout={args.dropout}')
 
         if args.model_name == 'RFN':
-            if args.type == 'sync':
-                model = RFN_sync(args, device=device).to(device)
-            else:
-                model = RFN_async(args, device=device).to(device)
+            model = RFN(args, device=device).to(device)
         elif args.model_name == 'GRUODE':
             model = GRU_ODE(args, device=device).to(device)
         elif args.model_name == 'ODELSTM':

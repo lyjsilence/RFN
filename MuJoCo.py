@@ -8,8 +8,8 @@ import argparse
 import random
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from models import RFN_sync, RFN_async
-from Baselines import GRU_ODE, ODELSTM, ODERNN, GRU_D, GRU_delta_t
+from models import RFN
+from Baselines import GRU_ODE, ODELSTM, ODERNN, GRU_D
 from models_training import Trainer
 import utils
 import warnings
@@ -18,7 +18,10 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 warnings.filterwarnings('ignore')
 
-
+'''
+The data generation and data preprodcessing is modified from 
+https://github.com/YuliaRubanova/latent_ode/blob/master/mujoco_physics.py
+'''
 
 def set_seed(seed):
     random.seed(seed)
@@ -34,10 +37,7 @@ def set_seed(seed):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-'''
-The data generation and data preprodcessing is modified from 
-https://github.com/YuliaRubanova/latent_ode/blob/master/mujoco_physics.py
-'''
+
 class HopperPhysics(object):
     t = 150
     D = 14
@@ -238,21 +238,21 @@ class HopperPhysics(object):
         fmt_str += '    Root Location: {}\n'.format(self.root)
         return fmt_str
 
+
 parser = argparse.ArgumentParser(description="FLOW_GRUODE for MuJoCo datasets")
 parser.add_argument('--seed', type=int, default=0, help='The random seed')
 parser.add_argument('--save_dirs', type=str, default='results/Hopper', help='The dirs for saving results')
 parser.add_argument('--log', type=bool, default=True, help='log the training process')
-parser.add_argument('--cuda', type=int, default=1)
+parser.add_argument('--cuda', type=int, default=0)
 
 # settings for experiments
 parser.add_argument('--missing_rate', type=float, default=0.5)
-parser.add_argument('--type', type=str, default='async', choices=['sync', 'async'])
+parser.add_argument('--type', type=str, default='sync', choices=['sync', 'async'])
 parser.add_argument('--model_name', type=str, default='RFN', help='The model want to implement',
-                    choices=['GRU-delta-t', 'GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D', 'RFN'])
+                    choices=['GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D', 'RFN'])
 parser.add_argument('--num_exp', type=int, default=5, help='The number of experiment')
 parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
-parser.add_argument('--min_lr', type=float, default=0.01, help='minimum learning rate')
-parser.add_argument('--adaptive_lr', type=str, default='cosine')
+parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
 parser.add_argument('--dt', type=float, default=0.01)
 parser.add_argument('--val_start', type=int, default=150)
@@ -261,11 +261,9 @@ parser.add_argument('--val_freq', type=int, default=5)
 # settings for sequential model
 parser.add_argument('--input_dim', type=int, default=14, help='The input dimension of time series')
 parser.add_argument('--memory_dim', type=int, default=10, help='The memory dimensions for one variable in marginal block')
-parser.add_argument('--marginal', type=str, default='GRUODE', help='The models for the marginal block',
-                    choices=['GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D'])
-parser.add_argument('--train_indep', type=bool, default=True, help='The models for the marginal block')
-parser.add_argument('--atol', type=float, default=1e-9)
-parser.add_argument('--rtol', type=float, default=1e-7)
+parser.add_argument('--marginal', type=str, default='GRUODE', help='The models for the marginal block')
+parser.add_argument('--atol', type=float, default=1e-6)
+parser.add_argument('--rtol', type=float, default=1e-4)
 
 # settings for flow model
 parser.add_argument('--solver', type=str, default='dopri5')
@@ -275,7 +273,6 @@ parser.add_argument('--act_fn', type=str, default='softplus', choices=['tanh', '
 parser.add_argument('--rademacher', type=bool, default=False)
 parser.add_argument('--flow_time', type=float, default=1)
 parser.add_argument('--train_T', type=bool, default=True)
-parser.add_argument('--batch_norm', type=bool, default=True)
 parser.add_argument('--viz', type=bool, default=False)
 parser.add_argument('--dropout', type=float, default=0)
 
@@ -304,27 +301,6 @@ if __name__ == '__main__':
     val_data = data[data['idx'].isin(val_idx)]
     test_data = data[data['idx'].isin(test_idx)]
 
-    if args.viz:
-        viz_data = test_data
-        viz_data_3 = viz_data[viz_data['time'] == 0.3][['ts_'+str(i) for i in range(14)]]
-        viz_data_6 = viz_data[viz_data['time'] == 0.6][['ts_'+str(i) for i in range(14)]]
-        viz_data_9 = viz_data[viz_data['time'] == 0.9][['ts_'+str(i) for i in range(14)]]
-        df_corr_3 = pd.DataFrame(viz_data_3).corr()
-        df_corr_6 = pd.DataFrame(viz_data_6).corr()
-        df_corr_9 = pd.DataFrame(viz_data_9).corr()
-
-        fig = plt.figure(figsize=[15, 5])
-        plt.subplot(1, 3, 1)
-        sns.heatmap(df_corr_3, center=0, annot=False, cmap='YlGnBu')
-        plt.title('Correlation matrix at time point 0.3')
-        plt.subplot(1, 3, 2)
-        sns.heatmap(df_corr_6, center=0, annot=False, cmap='YlGnBu')
-        plt.title('Correlation matrix at time point 0.6')
-        plt.subplot(1, 3, 3)
-        sns.heatmap(df_corr_9, center=0, annot=False, cmap='YlGnBu')
-        plt.title('Correlation matrix at time point 0.9')
-        plt.savefig(os.path.join(args.save_dirs, 'ground.jpg'))
-
     train_data = utils.sim_dataset(train_data)
     val_data = utils.sim_dataset(val_data)
     test_data = utils.sim_dataset(test_data)
@@ -343,10 +319,8 @@ if __name__ == '__main__':
               f'num_CNF={args.num_blocks}, dropout={args.dropout}')
 
         if args.model_name == 'RFN':
-            if args.type == 'sync':
-                model = RFN_sync(args, device=device).to(device)
-            else:
-                model = RFN_async(args, device=device).to(device)
+            args.lr = 0.03  # a larger learning rate achieve better performance for RFN model in Mujoco dataset
+            model = RFN(args, device=device).to(device)
         elif args.model_name == 'GRUODE':
             model = GRU_ODE(args, device=device).to(device)
         elif args.model_name == 'ODELSTM':
@@ -356,7 +330,8 @@ if __name__ == '__main__':
         elif args.model_name == 'GRU-D':
             model = GRU_D(args, device=device).to(device)
 
-        Trainer(model, dl_train, dl_val, dl_test, args, device, exp_id)
+
+        Trainer(model, dl_train, dl_val, dl_test, args, device, exp_id, epoch_max=200)
 
 
 

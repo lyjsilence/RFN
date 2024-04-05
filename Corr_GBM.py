@@ -1,21 +1,19 @@
-import os
-import random
-import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
-import warnings
-
+import argparse
+import random
 import torch
 from torch.utils.data import DataLoader
+import copy
+import os
 from sklearn.model_selection import train_test_split
-from models import RFN_sync, RFN_async
+from models import RFN
 from models_training import Trainer
 import utils
-
+import warnings
 from Baselines import GRU_ODE, ODELSTM, ODERNN, GRU_D
-
+import seaborn as sns
 
 warnings.filterwarnings('ignore')
 
@@ -48,26 +46,24 @@ parser.add_argument('--cuda', type=int, default=0)
 
 # settings for experiments
 parser.add_argument('--missing_rate', type=float, default=0.5)
-parser.add_argument('--type', type=str, default='async', choices=['sync', 'async'])
-parser.add_argument('--model_name', type=str, default='RFN', help='The model want to implement',
-                    choices=['GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D', 'RFN'])
+parser.add_argument('--type', type=str, default='sync', choices=['sync', 'async'])
+parser.add_argument('--model_name', type=str, default='GRU-D', help='The model want to implement',
+                    choices=['GRU-delta-t', 'GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D', 'RFN'])
 parser.add_argument('--start_exp', type=int, default=0)
 parser.add_argument('--num_exp', type=int, default=5, help='The number of experiment')
-parser.add_argument('--lr', type=float, default=0.005, help='Learning rate')
-parser.add_argument('--min_lr', type=float, default=0.001, help='minimum learning rate')
+parser.add_argument('--lr', type=float, default=0.01, help='Learning rate')
+parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay')
+parser.add_argument('--val_start', type=int, default=150, help='the initial epoch to start val')
 parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
 parser.add_argument('--dt', type=float, default=0.01)
-parser.add_argument('--val_start', type=int, default=150)
-parser.add_argument('--val_freq', type=int, default=5)
+
 
 # settings for sequential model
 parser.add_argument('--input_dim', type=int, default=5, help='The input dimension of time series')
 parser.add_argument('--memory_dim', type=int, default=10, help='The memory dimensions for one variable in marginal block')
-parser.add_argument('--marginal', type=str, default='GRUODE', help='The models for the marginal block',
-                    choices=['GRUODE', 'ODELSTM', 'ODERNN', 'GRU-D'])
-parser.add_argument('--train_indep', type=bool, default=True, help='Train each dimension independently')
-parser.add_argument('--atol', type=float, default=1e-7)
-parser.add_argument('--rtol', type=float, default=1e-7)
+parser.add_argument('--marginal', type=str, default='GRU-D', help='The models for the marginal block')
+parser.add_argument('--atol', type=float, default=1e-6)
+parser.add_argument('--rtol', type=float, default=1e-4)
 
 # settings for flow model
 parser.add_argument('--solver', type=str, default='dopri5')
@@ -77,8 +73,8 @@ parser.add_argument('--act_fn', type=str, default='softplus', choices=['tanh', '
 parser.add_argument('--rademacher', type=bool, default=False)
 parser.add_argument('--flow_time', type=float, default=1)
 parser.add_argument('--train_T', type=bool, default=True)
-parser.add_argument('--batch_norm', type=bool, default=True)
 parser.add_argument('--viz', type=bool, default=False)
+parser.add_argument('--viz_freq', type=int, default=10)
 parser.add_argument('--dropout', type=float, default=0)
 
 # settings for flow regularization
@@ -151,12 +147,9 @@ if __name__ == '__main__':
         print(f'Training models={args.model_name}; Exp_id={exp_id}; Data Type={args.type}; Missing rate={args.missing_rate}')
         print(f'HyperParams: lr={args.lr}, batch_size={args.batch_size}, memory_size={args.input_dim*args.memory_dim}, '
               f'num_CNF={args.num_blocks}, dropout={args.dropout}')
-        # set_seed(args.seed)
+
         if args.model_name == 'RFN':
-            if args.type == 'sync':
-                model = RFN_sync(args, device=device).to(device)
-            else:
-                model = RFN_async(args, device=device).to(device)
+            model = RFN(args, device=device).to(device)
         elif args.model_name == 'GRUODE':
             model = GRU_ODE(args, device=device).to(device)
         elif args.model_name == 'ODELSTM':
@@ -165,5 +158,6 @@ if __name__ == '__main__':
             model = ODERNN(args, device=device).to(device)
         elif args.model_name == 'GRU-D':
             model = GRU_D(args, device=device).to(device)
+
 
         Trainer(model, dl_train, dl_val, dl_test, args, device, exp_id)
